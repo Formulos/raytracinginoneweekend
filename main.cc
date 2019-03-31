@@ -10,6 +10,8 @@
 //==================================================================================================
 
 #include <iostream>
+#include <omp.h>
+#include <fstream>
 #include "sphere.h"
 #include "hitable_list.h"
 #include "float.h"
@@ -17,9 +19,12 @@
 #include "material.h"
 
 
+using namespace std;
+
+
 vec3 color(const ray& r, hitable *world, int depth) {
     hit_record rec;
-    if (world->hit(r, 0.001, MAXFLOAT, rec)) { 
+    if (world->hit(r, 0.001, MAXFLOAT, rec)) {
         ray scattered;
         vec3 attenuation;
         if (depth < 50 && rec.mat_ptr->scatter(r, rec, attenuation, scattered)) {
@@ -68,11 +73,15 @@ hitable *random_scene() {
     return new hitable_list(list,i);
 }
 
-int main() {
-    int nx = 1200;
-    int ny = 800;
+void call() {
+    int nx = 1200/2;
+    int ny = 800/2;
     int ns = 10;
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
+
+    std::ofstream sfile;
+    sfile.open("blabla", ios::out);
+
+    sfile << "P3\n" << nx << " " << ny << "\n255\n";
     hitable *list[5];
     float R = cos(M_PI/4);
     list[0] = new sphere(vec3(0,0,-1), 0.5, new lambertian(vec3(0.1, 0.2, 0.5)));
@@ -83,30 +92,55 @@ int main() {
     hitable *world = new hitable_list(list,5);
     world = random_scene();
 
+    
+    #pragma omp declare reduction( + : vec3 : omp_out = omp_in + omp_out) \
+                       initializer (omp_priv(omp_orig))
+
     vec3 lookfrom(13,2,3);
     vec3 lookat(0,0,0);
     float dist_to_focus = 10.0;
     float aperture = 0.1;
 
     camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
+    
+    double time = omp_get_wtime();
 
     for (int j = ny-1; j >= 0; j--) {
+        
         for (int i = 0; i < nx; i++) {
             vec3 col(0, 0, 0);
-            for (int s=0; s < ns; s++) {
-                float u = float(i + drand48()) / float(nx);
-                float v = float(j + drand48()) / float(ny);
-                ray r = cam.get_ray(u, v);
-                vec3 p = r.point_at_parameter(2.0);
-                col += color(r, world,0);
-            }
+
+ 
+            
+            #pragma omp parallel for reduction(+:col)
+                for (int s=0; s < ns; s++) {
+                    float u = float(i + drand48()) / float(nx);
+                    float v = float(j + drand48()) / float(ny);
+                    ray r = cam.get_ray(u, v);
+                    vec3 p = r.point_at_parameter(2.0);
+                    col += color(r, world,0);
+                }
+
+            
             col /= float(ns);
             col = vec3( sqrt(col[0]), sqrt(col[1]), sqrt(col[2]) );
             int ir = int(255.99*col[0]); 
             int ig = int(255.99*col[1]); 
-            int ib = int(255.99*col[2]); 
-            std::cout << ir << " " << ig << " " << ib << "\n";
+            int ib = int(255.99*col[2]);
+            //cout << ir << " " << ig << " " << ib << "\n";
+            sfile << ir << " " << ig << " " << ib << "\n";
         }
+    }
+    
+    sfile.close();
+    std::cout << " in " << omp_get_wtime()-time << " seconds\n";
+    
+}
+
+int main(){
+    int n = 5;
+    for (int i=0; i < n; i++) {
+        call();
     }
 }
 
