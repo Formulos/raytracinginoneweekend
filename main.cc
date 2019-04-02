@@ -12,13 +12,22 @@
 #include <iostream>
 #include <omp.h>
 #include <fstream>
+#include <ctime>
+#include <chrono>
 #include "sphere.h"
 #include "hitable_list.h"
 #include "float.h"
 #include "camera.h"
 #include "material.h"
 
-
+#pragma omp declare reduction( + : vec3 : omp_out = omp_in + omp_out) \
+                    initializer (omp_priv(omp_orig))
+/*redução personalizada para o vec3 syntaxe:
+pragma omp declare reduction ( identifier : typelist : combiner )
+indentifier: é o neme da operação que será feita + ja vem implementado
+typelist: lista de objetos que essa redução se aplica
+combiner: o jeito que o programa irá juntar cada parte calculada
+*/
 using namespace std;
 
 
@@ -47,6 +56,8 @@ hitable *random_scene() {
     hitable **list = new hitable*[n+1];
     list[0] =  new sphere(vec3(0,-1000,0), 1000, new lambertian(vec3(0.5, 0.5, 0.5)));
     int i = 1;
+
+    #pragma omp parallel for collapse(2) // junta os dois for e paralelisa eles
     for (int a = -11; a < 11; a++) {
         for (int b = -11; b < 11; b++) {
             float choose_mat = drand48();
@@ -73,13 +84,11 @@ hitable *random_scene() {
     return new hitable_list(list,i);
 }
 
-void call() {
-    int nx = 1200/2;
-    int ny = 800/2;
+void call(int nx,int ny) {
     int ns = 10;
 
     std::ofstream sfile;
-    sfile.open("blabla", ios::out);
+    sfile.open("imagem", ios::out);
 
     sfile << "P3\n" << nx << " " << ny << "\n255\n";
     hitable *list[5];
@@ -93,8 +102,7 @@ void call() {
     world = random_scene();
 
     
-    #pragma omp declare reduction( + : vec3 : omp_out = omp_in + omp_out) \
-                       initializer (omp_priv(omp_orig))
+
 
     vec3 lookfrom(13,2,3);
     vec3 lookat(0,0,0);
@@ -103,7 +111,7 @@ void call() {
 
     camera cam(lookfrom, lookat, vec3(0,1,0), 20, float(nx)/float(ny), aperture, dist_to_focus);
     
-    double time = omp_get_wtime();
+    auto start = std::chrono::high_resolution_clock::now();
 
     for (int j = ny-1; j >= 0; j--) {
         
@@ -112,7 +120,7 @@ void call() {
 
  
             
-            #pragma omp parallel for reduction(+:col)
+            #pragma omp parallel for reduction(+:col) // uso da redução personalizada
                 for (int s=0; s < ns; s++) {
                     float u = float(i + drand48()) / float(nx);
                     float v = float(j + drand48()) / float(ny);
@@ -127,22 +135,30 @@ void call() {
             int ir = int(255.99*col[0]); 
             int ig = int(255.99*col[1]); 
             int ib = int(255.99*col[2]);
-            //cout << ir << " " << ig << " " << ib << "\n";
             sfile << ir << " " << ig << " " << ib << "\n";
         }
     }
     
     sfile.close();
-    std::cout << " in " << omp_get_wtime()-time << " seconds\n";
+    auto end = std::chrono::high_resolution_clock::now();
+    chrono::duration<double> diff = end-start;
+    std::cout << " in " << diff.count() << " seconds\n";
     
 }
 
 int main(){
-    int n = 5;
+    int n;
+    int nx;
+    int ny;
+    cout << "Quantos quantas vezes o programa deve ser rodado?: ";
+    cin >> n;
+    cout << "tamanho da imagem gerada na horizontal(nx): ";
+    cin >> nx;
+    cout << "tamanho da imagem gerada na vertical(ny): ";
+    cin >> ny;
     for (int i=0; i < n; i++) {
-        call();
+        call(nx,ny);
     }
 }
-
 
 
