@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <curand_kernel.h>
+#include <chrono>
 #include "vec3.h"
 #include "ray.h"
 #include "sphere.h"
@@ -35,12 +36,12 @@ __global__ void render(vec3 *pixels,int nx,int ny,int ns,camera **cam,hitable **
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if((i >= nx) || (j >= ny)) return;
     int pixel_index = j*nx + i;
-    curandState *rand_state;
-    curand_init(1984+pixel_index, 0, 0, rand_state);
+    curandState rand_state;
+    curand_init(1984+pixel_index, 0, 0, &rand_state);
     vec3 col(0,0,0);
     for(int s=0; s < ns; s++) {
-        float u = float(i + curand_uniform(rand_state)) / float(nx);
-        float v = float(j + curand_uniform(rand_state)) / float(ny);
+        float u = float(i + curand_uniform(&rand_state)) / float(nx);
+        float v = float(j + curand_uniform(&rand_state)) / float(ny);
         ray r = (*cam)->get_ray(u,v);
         col += color(r, world);
     }
@@ -61,10 +62,12 @@ __global__ void free_world(hitable **d_list, hitable **d_world,camera **d_camera
     delete *d_camera;
  }
 
-int main() {
-    int nx = 400;
-    int ny = 200;
-    int ns = 100;
+void start() {
+    using namespace std::chrono;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+    int nx = 1200;
+    int ny = 800;
+    int ns = 50;
     int pixel_block = 4;
 
     int pixels_size = nx*ny;
@@ -108,6 +111,16 @@ int main() {
     cudaFree(d_list);
     cudaFree(d_world);
     cudaFree(d_camera);
+    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+
+    duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
+    std::cout << time_span.count()<<std::endl;
+}
+int main(){
+    int n = 1;
+    for (int i=0; i<n;i++){
+        start();
+    }
 }
 
 
