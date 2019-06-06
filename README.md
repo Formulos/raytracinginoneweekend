@@ -1,8 +1,6 @@
 Ray Tracing in One Weekend
 ====================================================================================================
 
-![Ray Tracing in One Weekend](./RTOneWeekend.jpg)
-
 ## Getting the Book
 The _Ray Tracing in One Weekend_ series of books are now available to the public for free in PDF
 form, along with the accompanying source code. Releases are available [directly from GitHub], or
